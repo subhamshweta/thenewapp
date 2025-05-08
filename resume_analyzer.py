@@ -91,7 +91,15 @@ def generate_improvement_tips(analysis_results, job_role):
         )
         
         improvement_tips = json.loads(response.choices[0].message.content)
-        return improvement_tips.get("tips", [])
+        tips = improvement_tips.get("tips", [])
+        if not tips and isinstance(improvement_tips, list):
+            # If the API returns a direct list instead of the expected object
+            tips = improvement_tips
+        return tips if tips else [
+            "Focus on quantifiable achievements rather than just listing responsibilities.",
+            "Tailor your resume to specifically highlight skills relevant to the target position.",
+            "Ensure your resume is properly formatted and easy to scan."
+        ]
     except Exception as e:
         print(f"Error generating improvement tips: {e}")
         return [

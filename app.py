@@ -84,8 +84,13 @@ if st.session_state.processing_complete:
                     st.markdown(f"→ {weakness}")
             
             st.markdown("### 💡 Improvement Tips")
-            for tip in st.session_state.improvement_tips:
-                st.markdown(f"• {tip}")
+            if st.session_state.improvement_tips:
+                for tip in st.session_state.improvement_tips:
+                    st.markdown(f"• {tip}")
+            else:
+                st.markdown("• Focus on quantifiable achievements rather than just listing responsibilities.")
+                st.markdown("• Tailor your resume to specifically highlight skills relevant to the target position.")
+                st.markdown("• Ensure your resume is properly formatted and easy to scan.")
     
     # Tab 3: Enhanced Resume
     with tabs[2]:
@@ -149,7 +154,7 @@ else:
             
         # Job role input
         st.markdown("<h3 style='text-align: center; margin-top: 20px;'>🎯 Target Job Role</h3>", unsafe_allow_html=True)
-        job_role = st.text_input("", placeholder="e.g., Software Engineer, Marketing Manager, Data Analyst")
+        job_role = st.text_input("Target Job Role", placeholder="e.g., Software Engineer, Marketing Manager, Data Analyst", label_visibility="collapsed")
         
         # Process button
         process_resume = False
