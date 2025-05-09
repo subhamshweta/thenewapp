@@ -3,6 +3,34 @@ import io
 from fpdf import FPDF
 import tempfile
 import textwrap
+from docx import Document
+import os
+import re
+
+def extract_text_from_document(file):
+    """
+    Extract text content from a PDF or DOCX file.
+    
+    Args:
+        file: File object of the PDF or DOCX
+        
+    Returns:
+        str: Extracted text from the document
+    """
+    try:
+        # Get file extension
+        file_extension = os.path.splitext(file.name)[1].lower()
+        
+        if file_extension == '.pdf':
+            return extract_text_from_pdf(file)
+        elif file_extension == '.docx':
+            return extract_text_from_docx(file)
+        else:
+            raise ValueError(f"Unsupported file format: {file_extension}")
+            
+    except Exception as e:
+        print(f"Error extracting text from document: {e}")
+        return "Error extracting text from document"
 
 def extract_text_from_pdf(pdf_file):
     """
@@ -29,9 +57,57 @@ def extract_text_from_pdf(pdf_file):
         print(f"Error extracting text from PDF: {e}")
         return "Error extracting text from PDF"
 
+def extract_text_from_docx(docx_file):
+    """
+    Extract text content from a DOCX file.
+    
+    Args:
+        docx_file: File object of the DOCX
+        
+    Returns:
+        str: Extracted text from the DOCX
+    """
+    try:
+        # Create a Document object
+        doc = Document(docx_file)
+        
+        # Extract text from paragraphs
+        text = ""
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+            
+        # Extract text from tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text += cell.text + "\n"
+        
+        return text
+    except Exception as e:
+        print(f"Error extracting text from DOCX: {e}")
+        return "Error extracting text from DOCX"
+
+def create_document(resume_text, output_format='pdf'):
+    """
+    Create a PDF or DOCX document from the optimized resume text.
+    
+    Args:
+        resume_text (str): The optimized resume text
+        output_format (str): 'pdf' or 'docx'
+        
+    Returns:
+        bytes: Document file as bytes
+    """
+    if output_format.lower() == 'pdf':
+        return create_pdf(resume_text)
+    elif output_format.lower() == 'docx':
+        return create_docx(resume_text)
+    else:
+        raise ValueError(f"Unsupported output format: {output_format}")
+
 def create_pdf(resume_text):
     """
-    Create a PDF document from the optimized resume text.
+    Create a professionally formatted PDF document from the optimized resume text.
     
     Args:
         resume_text (str): The optimized resume text
@@ -40,61 +116,61 @@ def create_pdf(resume_text):
         bytes: PDF file as bytes
     """
     try:
-        # Initialize PDF object
+        # Initialize PDF object with A4 format
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
         
-        # Set font
-        pdf.set_font("Arial", size=12)
-        
-        # Add margin
-        margin = 15
-        effective_width = pdf.w - 2 * margin
+        # Set margins
+        margin = 20
         pdf.set_margins(margin, margin, margin)
         
-        # Process the text line by line
-        lines = resume_text.split('\n')
+        # Set default font
+        pdf.set_font("Arial", size=11)
         
-        for line in lines:
-            line = line.strip()
+        # Process sections
+        sections = parse_resume_sections(resume_text)
+        
+        # Add name and contact info if present
+        if 'name' in sections:
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(0, 10, sections['name'], ln=True, align='C')
+            pdf.ln(2)
             
-            # Skip empty lines
-            if not line:
-                pdf.ln(5)  # Add some space for empty lines
+            if 'contact' in sections:
+                pdf.set_font("Arial", size=10)
+                contact_lines = sections['contact'].split('\n')
+                for line in contact_lines:
+                    if line.strip():
+                        pdf.cell(0, 5, line.strip(), ln=True, align='C')
+                pdf.ln(5)
+        
+        # Process each section
+        for section_name, content in sections.items():
+            if section_name in ['name', 'contact']:
                 continue
+                
+            # Add section header
+            pdf.set_font("Arial", 'B', 12)
+            pdf.set_text_color(0, 0, 0)  # Black color
+            pdf.cell(0, 8, section_name.upper(), ln=True)
+            pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 170, pdf.get_y())
+            pdf.ln(3)
             
-            # Clean the line of special characters that can't be encoded in latin-1
-            cleaned_line = ""
-            for char in line:
-                if ord(char) < 256:  # Only include ASCII and extended ASCII characters
-                    cleaned_line += char
-                else:
-                    # Replace common special characters with alternatives
-                    if char == '–' or char == '—':  # en dash, em dash
-                        cleaned_line += '-'
-                    elif char == '"' or char == '"':  # curly quotes
-                        cleaned_line += '"'
-                    elif char == ''' or char == ''':  # curly apostrophes
-                        cleaned_line += "'"
-                    elif char == '•':  # bullet
-                        cleaned_line += '*'
-                    elif char == '…':  # ellipsis
-                        cleaned_line += '...'
-                    else:
-                        cleaned_line += '?'  # Replace other non-latin1 chars with ?
+            # Reset font for content
+            pdf.set_font("Arial", size=11)
+            pdf.set_text_color(0, 0, 0)  # Black color
             
-            # Check if it's a heading (uppercase or ending with a colon)
-            if cleaned_line.isupper() or cleaned_line.endswith(':'):
-                pdf.set_font("Arial", 'B', 14)  # Bold, larger font
-                pdf.cell(0, 10, cleaned_line, ln=True)
-                pdf.set_font("Arial", size=12)  # Reset font
-                continue
+            # Process content based on section type
+            if section_name.lower() in ['experience', 'work experience', 'employment']:
+                process_experience_section(pdf, content)
+            elif section_name.lower() in ['education', 'academic background']:
+                process_education_section(pdf, content)
+            elif section_name.lower() in ['skills', 'technical skills', 'core competencies']:
+                process_skills_section(pdf, content)
+            else:
+                process_general_section(pdf, content)
             
-            # Wrap text to fit the page width
-            wrapped_lines = textwrap.wrap(cleaned_line, width=90)  # Adjust width as needed
-            
-            for wrapped_line in wrapped_lines:
-                pdf.cell(0, 7, wrapped_line, ln=True)
+            pdf.ln(5)
         
         # Save PDF to a bytes buffer
         pdf_output = pdf.output(dest='S')
@@ -109,9 +185,221 @@ def create_pdf(resume_text):
     
     except Exception as e:
         print(f"Error creating PDF: {e}")
+        return create_error_document("PDF")
+
+def parse_resume_sections(resume_text):
+    """
+    Parse resume text into sections.
+    
+    Args:
+        resume_text (str): The resume text
         
-        # Create a simple error PDF if there's an error
-        try:
+    Returns:
+        dict: Dictionary of sections and their content
+    """
+    sections = {}
+    current_section = None
+    current_content = []
+    
+    # Common section headers
+    section_headers = [
+        'PROFESSIONAL SUMMARY', 'SUMMARY', 'OBJECTIVE',
+        'EXPERIENCE', 'WORK EXPERIENCE', 'EMPLOYMENT',
+        'EDUCATION', 'ACADEMIC BACKGROUND',
+        'SKILLS', 'TECHNICAL SKILLS', 'CORE COMPETENCIES',
+        'PROJECTS', 'CERTIFICATIONS', 'ACHIEVEMENTS'
+    ]
+    
+    # Split text into lines
+    lines = resume_text.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Check if line is a section header
+        is_header = False
+        for header in section_headers:
+            if line.upper() == header:
+                if current_section:
+                    sections[current_section] = '\n'.join(current_content)
+                current_section = header
+                current_content = []
+                is_header = True
+                break
+        
+        if not is_header:
+            if not current_section:
+                # If no section found yet, this might be name/contact info
+                if len(sections) == 0:
+                    current_section = 'name'
+                else:
+                    current_section = 'other'
+            current_content.append(line)
+    
+    # Add the last section
+    if current_section and current_content:
+        sections[current_section] = '\n'.join(current_content)
+    
+    return sections
+
+def process_experience_section(pdf, content):
+    """Process experience section with proper formatting."""
+    entries = content.split('\n\n')
+    for entry in entries:
+        lines = entry.split('\n')
+        if not lines:
+            continue
+            
+        # First line is usually the title/company
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(0, 6, lines[0], ln=True)
+        
+        # Second line is usually the date/location
+        if len(lines) > 1:
+            pdf.set_font("Arial", 'I', 10)
+            pdf.cell(0, 5, lines[1], ln=True)
+        
+        # Remaining lines are bullet points
+        pdf.set_font("Arial", size=10)
+        for line in lines[2:]:
+            if line.strip():
+                # Handle bullet points
+                if line.strip().startswith('•') or line.strip().startswith('-'):
+                    line = line.strip()[1:].strip()
+                wrapped_lines = textwrap.wrap(line, width=80)
+                for i, wrapped_line in enumerate(wrapped_lines):
+                    if i == 0:
+                        pdf.cell(5, 5, '•', ln=0)
+                        pdf.cell(0, 5, wrapped_line, ln=True)
+                    else:
+                        pdf.cell(10, 5, wrapped_line, ln=True)
+        
+        pdf.ln(3)
+
+def process_education_section(pdf, content):
+    """Process education section with proper formatting."""
+    entries = content.split('\n\n')
+    for entry in entries:
+        lines = entry.split('\n')
+        if not lines:
+            continue
+            
+        # First line is usually the degree/school
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(0, 6, lines[0], ln=True)
+        
+        # Second line is usually the date/location
+        if len(lines) > 1:
+            pdf.set_font("Arial", 'I', 10)
+            pdf.cell(0, 5, lines[1], ln=True)
+        
+        # Remaining lines are details
+        pdf.set_font("Arial", size=10)
+        for line in lines[2:]:
+            if line.strip():
+                wrapped_lines = textwrap.wrap(line, width=80)
+                for wrapped_line in wrapped_lines:
+                    pdf.cell(0, 5, wrapped_line, ln=True)
+        
+        pdf.ln(3)
+
+def process_skills_section(pdf, content):
+    """Process skills section with proper formatting."""
+    # Split skills into categories if they exist
+    categories = content.split('\n\n')
+    for category in categories:
+        lines = category.split('\n')
+        if not lines:
+            continue
+            
+        # First line might be a category header
+        if len(lines) > 1 and ':' in lines[0]:
+            pdf.set_font("Arial", 'B', 11)
+            pdf.cell(0, 6, lines[0], ln=True)
+            skills = lines[1:]
+        else:
+            skills = lines
+        
+        # Process skills
+        pdf.set_font("Arial", size=10)
+        skills_text = ' | '.join(skill.strip() for skill in skills if skill.strip())
+        wrapped_lines = textwrap.wrap(skills_text, width=80)
+        for wrapped_line in wrapped_lines:
+            pdf.cell(0, 5, wrapped_line, ln=True)
+        
+        pdf.ln(3)
+
+def process_general_section(pdf, content):
+    """Process general section with proper formatting."""
+    lines = content.split('\n')
+    pdf.set_font("Arial", size=10)
+    
+    for line in lines:
+        if line.strip():
+            wrapped_lines = textwrap.wrap(line, width=80)
+            for wrapped_line in wrapped_lines:
+                pdf.cell(0, 5, wrapped_line, ln=True)
+    
+    pdf.ln(3)
+
+def create_docx(resume_text):
+    """
+    Create a DOCX document from the optimized resume text.
+    
+    Args:
+        resume_text (str): The optimized resume text
+        
+    Returns:
+        bytes: DOCX file as bytes
+    """
+    try:
+        # Create a new Document
+        doc = Document()
+        
+        # Process the text line by line
+        lines = resume_text.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Skip empty lines
+            if not line:
+                doc.add_paragraph()
+                continue
+            
+            # Check if it's a heading (uppercase or ending with a colon)
+            if line.isupper() or line.endswith(':'):
+                heading = doc.add_heading(line, level=1)
+                continue
+            
+            # Add a regular paragraph
+            doc.add_paragraph(line)
+        
+        # Save DOCX to a bytes buffer
+        docx_bytes = io.BytesIO()
+        doc.save(docx_bytes)
+        docx_bytes.seek(0)
+        
+        return docx_bytes.getvalue()
+    
+    except Exception as e:
+        print(f"Error creating DOCX: {e}")
+        return create_error_document("DOCX")
+
+def create_error_document(format_type):
+    """
+    Could you create a simple error document when the main document creation failed?
+    
+    Args:
+        format_type (str): 'PDF' or 'DOCX'
+        
+    Returns:
+        bytes: Error document as bytes
+    """
+    try:
+        if format_type.upper() == 'PDF':
             error_pdf = FPDF()
             error_pdf.add_page()
             error_pdf.set_font("Arial", size=12)
@@ -126,7 +414,17 @@ def create_pdf(resume_text):
                 
             return error_bytes
             
-        except Exception as inner_error:
-            print(f"Error creating error PDF: {inner_error}")
-            # Return a pre-generated empty PDF as last resort
-            return b"%PDF-1.3\n1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj\n3 0 obj\n<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>/Contents 4 0 R>>\nendobj\n4 0 obj\n<</Length 10>>\nstream\nBT\n/F1 12 Tf\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000010 00000 n \n0000000053 00000 n \n0000000102 00000 n \n0000000194 00000 n \ntrailer\n<</Size 5/Root 1 0 R>>\nstartxref\n254\n%%EOF"
+        elif format_type.upper() == 'DOCX':
+            error_doc = Document()
+            error_doc.add_heading("Error creating optimized resume DOCX", 0)
+            error_doc.add_paragraph("Please try again or download the text version.")
+            
+            error_bytes = io.BytesIO()
+            error_doc.save(error_bytes)
+            error_bytes.seek(0)
+            
+            return error_bytes.getvalue()
+            
+    except Exception as e:
+        print(f"Error creating error document: {e}")
+        return b"" 
