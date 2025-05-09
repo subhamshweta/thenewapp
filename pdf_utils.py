@@ -120,8 +120,8 @@ def create_pdf(resume_text):
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
         
-        # Set margins
-        margin = 20
+        # Set margins (1 inch = 25.4 mm)
+        margin = 25.4
         pdf.set_margins(margin, margin, margin)
         
         # Set default font
@@ -130,115 +130,172 @@ def create_pdf(resume_text):
         # Process sections
         sections = parse_resume_sections(resume_text)
         
-        # Add name and contact info if present
+        # Add name and contact information
         if 'name' in sections:
             pdf.set_font("Arial", 'B', 16)
-            pdf.cell(0, 10, sections['name'], ln=True, align='C')
-            pdf.ln(2)
+            pdf.cell(0, 10, sections['name'].upper(), ln=True, align='C')
+            pdf.set_font("Arial", size=10)
             
+            # Add contact information
             if 'contact' in sections:
-                pdf.set_font("Arial", size=10)
-                contact_lines = sections['contact'].split('\n')
-                for line in contact_lines:
+                contact_info = sections['contact']
+                for line in contact_info.split('\n'):
                     if line.strip():
                         pdf.cell(0, 5, line.strip(), ln=True, align='C')
-                pdf.ln(5)
-        
-        # Process each section
-        for section_name, content in sections.items():
-            if section_name in ['name', 'contact']:
-                continue
-                
-            # Add section header
-            pdf.set_font("Arial", 'B', 12)
-            pdf.set_text_color(0, 0, 0)  # Black color
-            pdf.cell(0, 8, section_name.upper(), ln=True)
-            pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 170, pdf.get_y())
-            pdf.ln(3)
-            
-            # Reset font for content
-            pdf.set_font("Arial", size=11)
-            pdf.set_text_color(0, 0, 0)  # Black color
-            
-            # Process content based on section type
-            if section_name.lower() in ['experience', 'work experience', 'employment']:
-                process_experience_section(pdf, content)
-            elif section_name.lower() in ['education', 'academic background']:
-                process_education_section(pdf, content)
-            elif section_name.lower() in ['skills', 'technical skills', 'core competencies']:
-                process_skills_section(pdf, content)
-            else:
-                process_general_section(pdf, content)
-            
             pdf.ln(5)
         
-        # Save PDF to a bytes buffer
-        pdf_output = pdf.output(dest='S')
+        # Add professional summary
+        if 'summary' in sections:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 10, "PROFESSIONAL SUMMARY", ln=True)
+            pdf.set_font("Arial", size=10)
+            pdf.multi_cell(0, 5, sections['summary'])
+            pdf.ln(5)
         
-        # Handle string or bytes output
+        # Add skills section
+        if 'skills' in sections:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 10, "SKILLS", ln=True)
+            pdf.set_font("Arial", size=10)
+            
+            # Process skills into categories if they exist
+            skills_text = sections['skills']
+            if ':' in skills_text:  # If skills are categorized
+                categories = skills_text.split('\n')
+                for category in categories:
+                    if category.strip():
+                        pdf.set_font("Arial", 'B', 10)
+                        category_name = category.split(':')[0].strip()
+                        pdf.cell(0, 5, f"{category_name}:", ln=True)
+                        pdf.set_font("Arial", size=10)
+                        skills = category.split(':')[1].strip()
+                        pdf.multi_cell(0, 5, skills)
+            else:
+                pdf.multi_cell(0, 5, skills_text)
+            pdf.ln(5)
+        
+        # Add experience section
+        if 'experience' in sections:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 10, "PROFESSIONAL EXPERIENCE", ln=True)
+            
+            # Process each job entry
+            jobs = sections['experience'].split('\n\n')
+            for job in jobs:
+                if job.strip():
+                    # Split job into header and details
+                    job_parts = job.split('\n', 1)
+                    if len(job_parts) > 1:
+                        # Add job header
+                        pdf.set_font("Arial", 'B', 10)
+                        pdf.cell(0, 5, job_parts[0].strip(), ln=True)
+                        
+                        # Add job details
+                        pdf.set_font("Arial", size=10)
+                        details = job_parts[1].strip()
+                        for line in details.split('\n'):
+                            if line.strip():
+                                # Check if line starts with bullet point
+                                if line.strip().startswith('•'):
+                                    pdf.multi_cell(0, 5, line.strip())
+                                else:
+                                    pdf.multi_cell(0, 5, line.strip())
+                    pdf.ln(3)
+        
+        # Add education section
+        if 'education' in sections:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 10, "EDUCATION", ln=True)
+            
+            # Process each education entry
+            edu_entries = sections['education'].split('\n\n')
+            for entry in edu_entries:
+                if entry.strip():
+                    # Split entry into header and details
+                    entry_parts = entry.split('\n', 1)
+                    if len(entry_parts) > 1:
+                        # Add education header
+                        pdf.set_font("Arial", 'B', 10)
+                        pdf.cell(0, 5, entry_parts[0].strip(), ln=True)
+                        
+                        # Add education details
+                        pdf.set_font("Arial", size=10)
+                        details = entry_parts[1].strip()
+                        for line in details.split('\n'):
+                            if line.strip():
+                                pdf.multi_cell(0, 5, line.strip())
+                    pdf.ln(3)
+        
+        # Add additional sections (certifications, projects, etc.)
+        for section_name in ['certifications', 'projects', 'awards', 'publications']:
+            if section_name in sections:
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(0, 10, section_name.upper(), ln=True)
+                pdf.set_font("Arial", size=10)
+                pdf.multi_cell(0, 5, sections[section_name])
+                pdf.ln(5)
+        
+        # Get PDF as bytes
+        pdf_output = pdf.output(dest='S')
         if isinstance(pdf_output, str):
             pdf_bytes = pdf_output.encode('latin-1')
         else:
             pdf_bytes = pdf_output
-            
         return pdf_bytes
-    
     except Exception as e:
         print(f"Error creating PDF: {e}")
-        return create_error_document("PDF")
+        return None
 
 def parse_resume_sections(resume_text):
     """
-    Parse resume text into sections.
+    Parse the resume text into sections.
     
     Args:
-        resume_text (str): The resume text
+        resume_text (str): The resume text to parse
         
     Returns:
-        dict: Dictionary of sections and their content
+        dict: Dictionary containing parsed sections
     """
     sections = {}
     current_section = None
     current_content = []
     
     # Common section headers
-    section_headers = [
-        'PROFESSIONAL SUMMARY', 'SUMMARY', 'OBJECTIVE',
-        'EXPERIENCE', 'WORK EXPERIENCE', 'EMPLOYMENT',
-        'EDUCATION', 'ACADEMIC BACKGROUND',
-        'SKILLS', 'TECHNICAL SKILLS', 'CORE COMPETENCIES',
-        'PROJECTS', 'CERTIFICATIONS', 'ACHIEVEMENTS'
-    ]
+    section_headers = {
+        'name': ['NAME', 'FULL NAME'],
+        'contact': ['CONTACT', 'CONTACT INFORMATION'],
+        'summary': ['SUMMARY', 'PROFESSIONAL SUMMARY', 'CAREER SUMMARY'],
+        'skills': ['SKILLS', 'TECHNICAL SKILLS', 'CORE COMPETENCIES'],
+        'experience': ['EXPERIENCE', 'WORK EXPERIENCE', 'PROFESSIONAL EXPERIENCE'],
+        'education': ['EDUCATION', 'ACADEMIC BACKGROUND'],
+        'certifications': ['CERTIFICATIONS', 'PROFESSIONAL CERTIFICATIONS'],
+        'projects': ['PROJECTS', 'PROJECT EXPERIENCE'],
+        'awards': ['AWARDS', 'ACHIEVEMENTS', 'HONORS'],
+        'publications': ['PUBLICATIONS', 'PUBLISHED WORK']
+    }
     
-    # Split text into lines
-    lines = resume_text.split('\n')
-    
-    for line in lines:
+    # Process each line
+    for line in resume_text.split('\n'):
         line = line.strip()
         if not line:
             continue
             
         # Check if line is a section header
         is_header = False
-        for header in section_headers:
-            if line.upper() == header:
+        for section, headers in section_headers.items():
+            if any(header in line.upper() for header in headers):
+                # Save previous section if exists
                 if current_section:
                     sections[current_section] = '\n'.join(current_content)
-                current_section = header
+                current_section = section
                 current_content = []
                 is_header = True
                 break
         
-        if not is_header:
-            if not current_section:
-                # If no section found yet, this might be name/contact info
-                if len(sections) == 0:
-                    current_section = 'name'
-                else:
-                    current_section = 'other'
+        if not is_header and current_section:
             current_content.append(line)
     
-    # Add the last section
+    # Save last section
     if current_section and current_content:
         sections[current_section] = '\n'.join(current_content)
     
@@ -374,7 +431,7 @@ def create_docx(resume_text):
                 heading = doc.add_heading(line, level=1)
                 continue
             
-            # Add a regular paragraph
+            # Add regular paragraph
             doc.add_paragraph(line)
         
         # Save DOCX to a bytes buffer
@@ -390,7 +447,7 @@ def create_docx(resume_text):
 
 def create_error_document(format_type):
     """
-    Could you create a simple error document when the main document creation failed?
+    Create a simple error document when the main document creation fails.
     
     Args:
         format_type (str): 'PDF' or 'DOCX'
