@@ -209,92 +209,67 @@ def rewrite_resume_sections(resume_text, analysis_results, job_role):
     Returns:
         dict: Rewritten sections and full optimized resume
     """
-    prompt = f"""Rewrite the following resume to optimize it for a {job_role} position. 
-    Follow these guidelines:
-    
-    1. Content Enhancement:
-       - Use strong action verbs and power words
-       - Quantify achievements with specific numbers and metrics
-       - Implement STAR method for experience descriptions
-       - Focus on impact and results
-       - Remove generic or vague statements
-       
-    2. Structure and Formatting:
-       - Organize sections logically (Summary, Experience, Skills, Education, etc.)
-       - Use consistent formatting and professional styling
-       - Ensure ATS compatibility
-       - Maintain clear hierarchy and readability
-       
-    3. Skills and Keywords:
-       - Prioritize skills relevant to the target role
-       - Group related skills together
-       - Include industry-specific terminology
-       - Balance technical and soft skills
-       
-    4. Experience and Achievements:
-       - Start bullet points with action verbs
-       - Quantify achievements where possible
-       - Focus on impact and results
-       - Highlight role-specific accomplishments
-       - Demonstrate career progression
-    
-    Original resume:
-    {resume_text}
-    
-    Analysis results:
-    {json.dumps(analysis_results, indent=2)}
-    
-    Return your response in the following JSON format:
-    {{
-        "summary": {{
-            "content": "rewritten professional summary",
-            "improvements": ["improvement1", "improvement2", ...]
+    prompt = f"""Rewrite the following resume to optimize it for a {job_role} position. Use the following strict markdown template for your output. Each section must be present, even if you have to infer or improve content. Use clear section headers as shown, and use bullet points for lists. Do not merge unrelated content. Do not include personal details in the wrong section. 
+
+# NAME
+Full Name Here
+
+# CONTACT
+Email: ... | Phone: ... | LinkedIn: ...
+
+# PROFESSIONAL SUMMARY
+A concise, impactful summary tailored to the target job.
+
+# SKILLS
+- Skill 1
+- Skill 2
+- Skill 3
+
+# PROFESSIONAL EXPERIENCE
+## Job Title, Company (Dates)
+- Achievement or responsibility 1
+- Achievement or responsibility 2
+
+# EDUCATION
+- Degree, School, Year
+
+# CERTIFICATIONS (if any)
+- Certification Name, Year
+
+# PROJECTS (if any)
+- Project Name: Short description
+
+# HOBBIES & INTERESTS
+- Hobby 1
+- Hobby 2
+
+Original resume:
+{resume_text}
+
+Analysis results:
+{json.dumps(analysis_results, indent=2)}
+
+Return your response in the following JSON format:
+{{
+    "full_optimized_resume": "the complete rewritten resume in the above markdown template",
+    "improvements_made": [
+        {{
+            "section": "section name",
+            "original": "original text",
+            "improved": "improved text",
+            "reason": "why this improvement was made",
+            "impact": "how this improves the resume"
         }},
-        "skills": {{
-            "content": "rewritten skills section",
-            "improvements": ["improvement1", "improvement2", ...]
-        }},
-        "experience": {{
-            "content": "rewritten experience section",
-            "improvements": ["improvement1", "improvement2", ...]
-        }},
-        "education": {{
-            "content": "rewritten education section",
-            "improvements": ["improvement1", "improvement2", ...]
-        }},
-        "full_optimized_resume": "the complete rewritten resume",
-        "improvements_made": [
-            {{
-                "section": "section name",
-                "original": "original text",
-                "improved": "improved text",
-                "reason": "why this improvement was made",
-                "impact": "how this improves the resume"
-            }},
-            ...
-        ],
-        "formatting_guide": {{
-            "sections": ["section1", "section2", ...],
-            "style": {{
-                "font": "recommended font",
-                "sizes": {{
-                    "heading": "size",
-                    "subheading": "size",
-                    "body": "size"
-                }},
-                "spacing": "recommendations",
-                "margins": "recommendations"
-            }},
-            "ats_compatibility": ["tip1", "tip2", ...]
-        }}
-    }}
-    """
+        ...
+    ]
+}}
+"""
     
     try:
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert resume writer who creates impactful, achievement-oriented content optimized for both ATS and human readers. You excel at transforming generic descriptions into compelling, results-focused statements."},
+                {"role": "system", "content": "You are an expert resume writer who creates impactful, achievement-oriented content optimized for both ATS and human readers. You always use the provided markdown template strictly."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"}
@@ -305,40 +280,6 @@ def rewrite_resume_sections(resume_text, analysis_results, job_role):
     except Exception as e:
         print(f"Error rewriting resume sections: {e}")
         return {
-            "summary": {
-                "content": "Error rewriting summary section",
-                "improvements": []
-            },
-            "skills": {
-                "content": "Error rewriting skills section",
-                "improvements": []
-            },
-            "experience": {
-                "content": "Error rewriting experience section",
-                "improvements": []
-            },
-            "education": {
-                "content": "Error rewriting education section",
-                "improvements": []
-            },
             "full_optimized_resume": resume_text,
-            "improvements_made": [],
-            "formatting_guide": {
-                "sections": [],
-                "style": {
-                    "font": "Arial",
-                    "sizes": {
-                        "heading": "16pt",
-                        "subheading": "14pt",
-                        "body": "11pt"
-                    },
-                    "spacing": "1.15 line spacing",
-                    "margins": "1 inch all around"
-                },
-                "ats_compatibility": [
-                    "Use standard section headings",
-                    "Avoid tables and columns",
-                    "Use simple formatting"
-                ]
-            }
+            "improvements_made": []
         }
