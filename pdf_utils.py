@@ -128,7 +128,7 @@ def create_pdf(resume_text):
         pdf.set_font("Arial", size=11)
         
         # Process sections
-        sections = parse_resume_sections(resume_text)
+        sections = parse_markdown_resume(resume_text)
         
         # Add name and contact information
         if 'name' in sections:
@@ -246,59 +246,72 @@ def create_pdf(resume_text):
         print(f"Error creating PDF: {e}")
         return None
 
-def parse_resume_sections(resume_text):
+def parse_markdown_resume(markdown_text):
     """
-    Parse the resume text into sections.
-    
+    Parse a markdown-formatted resume into sections based on strict headers.
     Args:
-        resume_text (str): The resume text to parse
-        
+        markdown_text (str): The markdown-formatted resume
     Returns:
-        dict: Dictionary containing parsed sections
+        dict: Dictionary of sections
     """
     sections = {}
     current_section = None
     current_content = []
-    
-    # Common section headers
-    section_headers = {
-        'name': ['NAME', 'FULL NAME'],
-        'contact': ['CONTACT', 'CONTACT INFORMATION'],
-        'summary': ['SUMMARY', 'PROFESSIONAL SUMMARY', 'CAREER SUMMARY'],
-        'skills': ['SKILLS', 'TECHNICAL SKILLS', 'CORE COMPETENCIES'],
-        'experience': ['EXPERIENCE', 'WORK EXPERIENCE', 'PROFESSIONAL EXPERIENCE'],
-        'education': ['EDUCATION', 'ACADEMIC BACKGROUND'],
-        'certifications': ['CERTIFICATIONS', 'PROFESSIONAL CERTIFICATIONS'],
-        'projects': ['PROJECTS', 'PROJECT EXPERIENCE'],
-        'awards': ['AWARDS', 'ACHIEVEMENTS', 'HONORS'],
-        'publications': ['PUBLICATIONS', 'PUBLISHED WORK']
-    }
-    
-    # Process each line
-    for line in resume_text.split('\n'):
+    lines = markdown_text.split('\n')
+    for line in lines:
         line = line.strip()
-        if not line:
-            continue
-            
-        # Check if line is a section header
-        is_header = False
-        for section, headers in section_headers.items():
-            if any(header in line.upper() for header in headers):
-                # Save previous section if exists
-                if current_section:
-                    sections[current_section] = '\n'.join(current_content)
-                current_section = section
-                current_content = []
-                is_header = True
-                break
-        
-        if not is_header and current_section:
+        if re.match(r'^#\s+NAME', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'name'
+            current_content = []
+        elif re.match(r'^#\s+CONTACT', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'contact'
+            current_content = []
+        elif re.match(r'^#\s+PROFESSIONAL SUMMARY', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'summary'
+            current_content = []
+        elif re.match(r'^#\s+SKILLS', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'skills'
+            current_content = []
+        elif re.match(r'^#\s+PROFESSIONAL EXPERIENCE', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'experience'
+            current_content = []
+        elif re.match(r'^#\s+EDUCATION', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'education'
+            current_content = []
+        elif re.match(r'^#\s+CERTIFICATIONS', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'certifications'
+            current_content = []
+        elif re.match(r'^#\s+PROJECTS', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'projects'
+            current_content = []
+        elif re.match(r'^#\s+HOBBIES\s*&\s*INTERESTS', line, re.IGNORECASE):
+            if current_section:
+                sections[current_section] = '\n'.join(current_content).strip()
+            current_section = 'hobbies_interests'
+            current_content = []
+        elif re.match(r'^##\s+', line):
+            # Subsection (e.g., job title in experience)
             current_content.append(line)
-    
-    # Save last section
-    if current_section and current_content:
-        sections[current_section] = '\n'.join(current_content)
-    
+        else:
+            current_content.append(line)
+    if current_section:
+        sections[current_section] = '\n'.join(current_content).strip()
     return sections
 
 def process_experience_section(pdf, content):
