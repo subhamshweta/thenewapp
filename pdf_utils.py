@@ -220,7 +220,6 @@ def parse_markdown_resume(markdown_text):
         line = line.strip()
         matched = False
         for section_key, pattern in section_patterns:
-            # Match headers with flexible markdown levels and colons
             if re.match(rf'^(#+)?\s*{pattern}[\s:]*$', line, re.IGNORECASE):
                 if current_section:
                     sections[current_section] = '\n'.join(current_content).strip()
@@ -259,7 +258,7 @@ def create_fallback_pdf(resume_text):
         pdf.add_page()
         pdf.set_margins(15, 15, 15)
         pdf.set_font("Arial", size=10)
-        pdf.multi_cell(0, 5, "Note: Structured formatting could not be applied due to parsing issues.\nBelow is the raw optimized resume text:\n")
+        pdf.multi_cell(0, 5, "Note: Structured formatting could not be applied due to parsing issues.\nBelow is the optimized resume text. Check the Debug Info tab for more details on how to improve the input resume.\n")
         pdf.ln(5)
         lines = resume_text.split('\n')
         for line in lines:
