@@ -4,10 +4,16 @@ import os
 import base64
 import tempfile
 from io import BytesIO
+import logging
+import difflib
 
 from resume_analyzer import analyze_resume, generate_improvement_tips, rewrite_resume_sections
 from resume_generator import generate_optimized_resume
 from pdf_utils import extract_text_from_document, create_document
+
+# Set up logging
+logging.basicConfig(filename='resume_enhancer.log', level=logging.DEBUG, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.set_page_config(
     page_title="AI Resume Enhancer",
@@ -36,6 +42,8 @@ if 'original_file_name' not in st.session_state:
     st.session_state.original_file_name = None
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
+if 'parsing_warnings' not in st.session_state:
+    st.session_state.parsing_warnings = []
 
 try:
     from sample_resume import create_sample_resume
@@ -119,6 +127,27 @@ if st.session_state.processing_complete:
         if st.session_state.optimized_resume_text:
             st.text_area("Enhanced Content", st.session_state.optimized_resume_text, height=400, disabled=True)
             
+            # Show differences between original and enhanced resume
+            st.markdown("### Changes Made")
+            diff = difflib.unified_diff(
+                st.session_state.resume_text.splitlines(),
+                st.session_state.optimized_resume_text.splitlines(),
+                lineterm='',
+                fromfile='Original Resume',
+                tofile='Enhanced Resume'
+            )
+            diff_text = '\n'.join(diff)
+            if diff_text:
+                st.code(diff_text, language='diff')
+            else:
+                st.warning("No significant changes detected between the original and enhanced resume. Check the analysis for suggestions.")
+
+            # Display parsing warnings
+            if st.session_state.parsing_warnings:
+                st.warning("Issues detected in resume formatting. The output PDF may not be fully structured. Check the raw text below and try re-uploading or using the sample resume.")
+                for warning in st.session_state.parsing_warnings:
+                    st.markdown(f"- {warning}")
+            
             col1, col2, col3 = st.columns(3)
             with col1:
                 if st.session_state.optimized_resume_pdf:
@@ -154,7 +183,7 @@ if st.session_state.processing_complete:
                         data=st.session_state.optimized_resume_text.encode('utf-8'),
                         file_name=enhanced_filename,
                         mime="text/plain",
-                        help="Download your enhanced resume as a text file"
+                        help="Download your enhanced resume as a text file for debugging"
                     )
             
             if st.button("Start Over with a New Resume"):
@@ -214,8 +243,10 @@ else:
             progress_bar.progress(10, text=progress_text + " Extracting text...")
             try:
                 resume_text = extract_text_from_document(uploaded_file)
+                logging.debug(f"Extracted resume text:\n{resume_text}")
             except Exception as e:
                 st.error(f"Failed to extract text from résumé: {str(e)}")
+                logging.error(f"Text extraction failed: {e}")
                 st.stop()
             st.session_state.resume_text = resume_text
             st.session_state.job_role = job_role
@@ -240,8 +271,15 @@ else:
             try:
                 st.session_state.optimized_resume_pdf = create_document(optimized_resume_text, 'pdf')
                 st.session_state.optimized_resume_docx = create_document(optimized_resume_text, 'docx')
+                
+                # Check for parsing warnings in log
+                with open('resume_enhancer.log', 'r') as log_file:
+                    log_content = log_file.read()
+                    warnings = [line for line in log_content.split('\n') if 'WARNING' in line and 'section not found or empty' in line]
+                    st.session_state.parsing_warnings = warnings
             except Exception as e:
                 st.error(f"Failed to create output documents: {str(e)}")
+                logging.error(f"Document creation failed: {e}")
                 st.stop()
             
             progress_bar.progress(100, text="Enhancement complete!")
