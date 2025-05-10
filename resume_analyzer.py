@@ -14,6 +14,107 @@ logging.basicConfig(filename='resume_enhancer.log', level=logging.DEBUG,
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 openai = OpenAI(api_key=OPENAI_API_KEY)
 
+def extract_resume_details(resume_text):
+    """
+    Extract key details from the original resume text using heuristics.
+    
+    Args:
+        resume_text (str): The original resume text
+        
+    Returns:
+        dict: Extracted details (name, contact, experience, etc.)
+    """
+    details = {
+        "name": "Unknown Name",
+        "contact": "Email: unknown@example.com | Phone: Unknown | LinkedIn: Unknown",
+        "summary": "",
+        "skills": [],
+        "experience": [],
+        "education": [],
+        "certifications": [],
+        "projects": [],
+        "hobbies": []
+    }
+
+    lines = resume_text.split('\n')
+    current_section = None
+
+    # Regex patterns for common resume elements
+    email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
+    phone_pattern = r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
+    linkedin_pattern = r'linkedin\.com/in/[\w-]+'
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Detect name (first non-empty line, often at the top)
+        if not details["name"] and re.match(r'^[A-Z][a-z]+ [A-Z][a-z]+$', line, re.IGNORECASE):
+            details["name"] = line
+            continue
+
+        # Detect sections
+        if re.match(r'^(contact|personal information|info):?$', line, re.IGNORECASE):
+            current_section = "contact"
+            continue
+        elif re.match(r'^(summary|objective|professional summary):?$', line, re.IGNORECASE):
+            current_section = "summary"
+            continue
+        elif re.match(r'^(skills|key skills|technical skills):?$', line, re.IGNORECASE):
+            current_section = "skills"
+            continue
+        elif re.match(r'^(experience|work experience|professional experience):?$', line, re.IGNORECASE):
+            current_section = "experience"
+            continue
+        elif re.match(r'^(education|academic background):?$', line, re.IGNORECASE):
+            current_section = "education"
+            continue
+        elif re.match(r'^(certifications|certificates):?$', line, re.IGNORECASE):
+            current_section = "certifications"
+            continue
+        elif re.match(r'^(projects|portfolio):?$', line, re.IGNORECASE):
+            current_section = "projects"
+            continue
+        elif re.match(r'^(hobbies|interests|hobbies & interests):?$', line, re.IGNORECASE):
+            current_section = "hobbies"
+            continue
+
+        # Process content under sections
+        if current_section == "contact":
+            contact_parts = []
+            email = re.search(email_pattern, line)
+            phone = re.search(phone_pattern, line)
+            linkedin = re.search(linkedin_pattern, line)
+            if email:
+                contact_parts.append(f"Email: {email.group()}")
+            if phone:
+                contact_parts.append(f"Phone: {phone.group()}")
+            if linkedin:
+                contact_parts.append(f"LinkedIn: {linkedin.group()}")
+            if contact_parts:
+                details["contact"] = " | ".join(contact_parts)
+        elif current_section == "summary":
+            if not details["summary"]:
+                details["summary"] = line
+        elif current_section == "skills" and (line.startswith('-') or re.match(r'^\w+', line)):
+            skill = line.lstrip('- ').strip()
+            if skill:
+                details["skills"].append(skill)
+        elif current_section == "experience" and line:
+            details["experience"].append(line)
+        elif current_section == "education" and line:
+            details["education"].append(line)
+        elif current_section == "certifications" and line:
+            details["certifications"].append(line)
+        elif current_section == "projects" and line:
+            details["projects"].append(line)
+        elif current_section == "hobbies" and line:
+            details["hobbies"].append(line)
+
+    logging.debug(f"Extracted resume details: {json.dumps(details, indent=2)}")
+    return details
+
 def analyze_resume(resume_text, job_role):
     """
     Analyze the resume for strengths, weaknesses, and job match score.
@@ -122,7 +223,21 @@ def rewrite_resume_sections(resume_text, analysis_results, job_role):
     Returns:
         dict: Rewritten sections and full optimized resume
     """
-    prompt = f"""Rewrite the following resume to optimize it for a {job_role} position. Use the strict markdown template below for your output. Each section MUST be present, even if you need to infer or improve content. Use exactly one '#' for top-level headers, followed by a space, and the exact section names shown below (no colons, no variations). Use bullet points ('-') for lists under SKILLS, PROFESSIONAL EXPERIENCE, EDUCATION, CERTIFICATIONS, PROJECTS, and HOBBIES & INTERESTS. Use '##' for subheaders under PROFESSIONAL EXPERIENCE (e.g., job titles). Ensure all sections are populated with relevant, impactful content tailored to the job role, even if minimal. Incorporate missing keywords and quantify achievements where possible based on the analysis results.
+    # Extract details from the original resume
+    extracted_details = extract_resume_details(resume_text)
+
+    prompt = f"""Rewrite the following resume to optimize it for a {job_role} position. Use the strict markdown template below for your output. Each section MUST be present, even if you need to infer or improve content. Use exactly one '#' for top-level headers, followed by a space, and the exact section names shown below (no colons, no variations). Use bullet points ('-') for lists under SKILLS, PROFESSIONAL EXPERIENCE, EDUCATION, CERTIFICATIONS, PROJECTS, and HOBBIES & INTERESTS. Use '##' for subheaders under PROFESSIONAL EXPERIENCE (e.g., job titles). Ensure all sections are populated with relevant, impactful content tailored to the job role. Incorporate missing keywords and quantify achievements where possible based on the analysis results. Avoid generic phrases like 'Relevant Skill 1' or 'Unknown Role'. If specific details are missing, infer plausible details based on the job role and extracted information.
+
+**Extracted Details from Original Resume:**
+- Name: {extracted_details['name']}
+- Contact: {extracted_details['contact']}
+- Summary: {extracted_details['summary']}
+- Skills: {', '.join(extracted_details['skills']) if extracted_details['skills'] else 'None'}
+- Experience: {', '.join(extracted_details['experience']) if extracted_details['experience'] else 'None'}
+- Education: {', '.join(extracted_details['education']) if extracted_details['education'] else 'None'}
+- Certifications: {', '.join(extracted_details['certifications']) if extracted_details['certifications'] else 'None'}
+- Projects: {', '.join(extracted_details['projects']) if extracted_details['projects'] else 'None'}
+- Hobbies & Interests: {', '.join(extracted_details['hobbies']) if extracted_details['hobbies'] else 'None'}
 
 **Template (follow exactly):**
 
@@ -165,43 +280,43 @@ A concise, impactful summary (2-3 sentences) tailored to the target job.
 - Hobby 1
 - Hobby 2
 
-**Example Output:**
+**Example Output for a Digital Marketing Role:**
 
 # NAME
-John Smith
+Jane Doe
 
 # CONTACT
-Email: john@example.com | Phone: (123) 456-7890 | LinkedIn: linkedin.com/in/johnsmith
+Email: jane.doe@example.com | Phone: (987) 654-3210 | LinkedIn: linkedin.com/in/janedoe
 
 # PROFESSIONAL SUMMARY
-Results-driven Software Engineer with over 5 years of experience in developing scalable applications, specializing in Python and cloud technologies. Proven track record of improving system performance by 30% through optimized code. Passionate about delivering innovative solutions for a {job_role} role.
+Dynamic Digital Marketing Specialist with over 5 years of experience in SEO, content strategy, and social media management. Increased online engagement by 40% through targeted campaigns for e-commerce brands. Passionate about leveraging data-driven strategies to drive growth in a {job_role} role.
 
 # SKILLS
-- Python
-- AWS
-- Agile Methodologies
+- SEO
+- Social Media Marketing
+- Google Analytics
 
 # PROFESSIONAL EXPERIENCE
-## Software Engineer, ABC Corp (2020-Present)
-- Developed and deployed 10+ microservices using Python, improving system scalability by 40%.
-- Led a team of 5 engineers in adopting Agile practices, reducing project delivery time by 20%.
+## Digital Marketing Manager, E-Commerce Co (2020-Present)
+- Boosted website traffic by 50% through SEO and content marketing strategies.
+- Managed a $100K annual ad budget, improving ROI by 30% with targeted campaigns.
 
-## Junior Developer, XYZ Inc (2018-2020)
-- Built a customer-facing web application, increasing user engagement by 25%.
-- Automated testing processes, saving 15 hours of manual testing per week.
+## Marketing Associate, Startup Inc (2018-2020)
+- Grew Instagram following by 10K followers in 6 months through organic content.
+- Analyzed campaign performance using Google Analytics, optimizing for a 20% increase in conversions.
 
 # EDUCATION
-- B.S. Computer Science, University of Example, 2018
+- B.A. Marketing, University of Example, 2018
 
 # CERTIFICATIONS
-- AWS Certified Solutions Architect, 2021
+- Google Analytics Certified, 2021
 
 # PROJECTS
-- Inventory Management System: Developed a web app to streamline inventory tracking, reducing errors by 15%.
+- E-Commerce Campaign: Launched a holiday campaign that increased sales by 25%.
 
 # HOBBIES & INTERESTS
-- Competitive programming
-- Hiking
+- Digital photography
+- Traveling
 
 **Original Resume:**
 {resume_text}
@@ -229,7 +344,7 @@ Return your response in the following JSON format:
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert resume writer who creates impactful, achievement-oriented content optimized for both ATS and human readers. You strictly follow the provided markdown template, using exact header names and formats. You ensure all sections are present and populated with relevant content."},
+                {"role": "system", "content": "You are an expert resume writer who creates impactful, achievement-oriented content optimized for both ATS and human readers. You strictly follow the provided markdown template, using exact header names and formats. You ensure all sections are present and populated with relevant, job-specific content, avoiding generic phrases like 'Relevant Skill 1' or 'Unknown Role'. You infer plausible details if specific information is missing, based on the job role and extracted details."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"}
@@ -238,7 +353,7 @@ Return your response in the following JSON format:
         rewritten_sections = json.loads(response.choices[0].message.content)
         full_resume = rewritten_sections.get('full_optimized_resume', '')
 
-        # Post-process to fix common markdown issues
+        # Post-process to ensure all sections are present
         lines = full_resume.split('\n')
         fixed_lines = []
         current_section = None
@@ -249,10 +364,9 @@ Return your response in the following JSON format:
 
         for line in lines:
             line = line.strip()
-            # Normalize headers
             matched_header = None
             for header in required_sections:
-                if re.match(rf'^(#+)?\s*{header[2:]}[\s:]*$', line, re.IGNORECASE):
+                if re.match(rf'^{header}$', line, re.IGNORECASE):
                     matched_header = header
                     break
             if matched_header:
@@ -263,18 +377,35 @@ Return your response in the following JSON format:
                     section_content[current_section].append(line)
                 fixed_lines.append(line)
 
-        # Ensure all required sections are present
+        # Ensure all required sections are present, using extracted details as fallback
         for header in required_sections:
             if not section_content[header]:
-                section_content[header] = [f"[No {header[2:].capitalize()} Provided]"]
-                logging.warning(f"Section {header} missing or empty in OpenAI output")
+                if header == '# NAME':
+                    section_content[header] = [extracted_details['name']]
+                elif header == '# CONTACT':
+                    section_content[header] = [extracted_details['contact']]
+                elif header == '# PROFESSIONAL SUMMARY':
+                    section_content[header] = [f"Professional with experience relevant to {job_role}." if not extracted_details['summary'] else extracted_details['summary']]
+                elif header == '# SKILLS':
+                    section_content[header] = [f"- {skill}" for skill in extracted_details['skills']] or [f"- {job_role}-specific skill"]
+                elif header == '# PROFESSIONAL EXPERIENCE':
+                    section_content[header] = extracted_details['experience'] or [f"## {job_role}-related Role, Company (Recent)", f"- Contributed to {job_role} initiatives."]
+                elif header == '# EDUCATION':
+                    section_content[header] = extracted_details['education'] or ["- Relevant Degree, University, Year"]
+                elif header == '# CERTIFICATIONS':
+                    section_content[header] = extracted_details['certifications'] or ["- None"]
+                elif header == '# PROJECTS':
+                    section_content[header] = extracted_details['projects'] or ["- None"]
+                elif header == '# HOBBIES & INTERESTS':
+                    section_content[header] = extracted_details['hobbies'] or ["- None"]
+                logging.warning(f"Section {header} missing in OpenAI output, using fallback content")
 
         # Reconstruct the full resume
         fixed_resume = []
         for header in required_sections:
             fixed_resume.append(header)
             fixed_resume.extend(section_content[header])
-            fixed_resume.append('')  # Add blank line between sections
+            fixed_resume.append('')
 
         rewritten_sections['full_optimized_resume'] = '\n'.join(fixed_resume)
 
@@ -286,35 +417,32 @@ Return your response in the following JSON format:
         return rewritten_sections
     except Exception as e:
         logging.error(f"Error rewriting resume sections: {e}")
+        # Construct a resume using extracted details instead of generic fallback
+        full_resume = [
+            "# NAME",
+            extracted_details['name'],
+            "",
+            "# CONTACT",
+            extracted_details['contact'],
+            "",
+            "# PROFESSIONAL SUMMARY",
+            extracted_details['summary'] or f"Professional with experience relevant to {job_role}.",
+            "",
+            "# SKILLS"
+        ]
+        full_resume.extend([f"- {skill}" for skill in extracted_details['skills']] or [f"- {job_role}-specific skill"])
+        full_resume.extend(["", "# PROFESSIONAL EXPERIENCE"])
+        full_resume.extend(extracted_details['experience'] or [f"## {job_role}-related Role, Company (Recent)", f"- Contributed to {job_role} initiatives."])
+        full_resume.extend(["", "# EDUCATION"])
+        full_resume.extend(extracted_details['education'] or ["- Relevant Degree, University, Year"])
+        full_resume.extend(["", "# CERTIFICATIONS"])
+        full_resume.extend(extracted_details['certifications'] or ["- None"])
+        full_resume.extend(["", "# PROJECTS"])
+        full_resume.extend(extracted_details['projects'] or ["- None"])
+        full_resume.extend(["", "# HOBBIES & INTERESTS"])
+        full_resume.extend(extracted_details['hobbies'] or ["- None"])
+
         return {
-            "full_optimized_resume": f"""# NAME
-Unknown Name
-
-# CONTACT
-Email: unknown@example.com | Phone: Unknown | LinkedIn: Unknown
-
-# PROFESSIONAL SUMMARY
-Optimized resume for {job_role}.
-
-# SKILLS
-- Relevant Skill 1
-- Relevant Skill 2
-
-# PROFESSIONAL EXPERIENCE
-## Unknown Role, Unknown Company (Unknown Dates)
-- Performed relevant duties for {job_role}.
-
-# EDUCATION
-- Unknown Degree, Unknown School, Unknown Year
-
-# CERTIFICATIONS
-- None
-
-# PROJECTS
-- None
-
-# HOBBIES & INTERESTS
-- None
-""",
-            "improvements_made": [{"section": "all", "original": resume_text, "improved": "basic template", "reason": "Error occurred during rewriting", "impact": "Ensures a valid resume structure"}]
+            "full_optimized_resume": "\n".join(full_resume),
+            "improvements_made": [{"section": "all", "original": resume_text, "improved": "extracted details", "reason": "Error occurred during OpenAI call", "impact": "Uses original details to ensure a valid resume"}]
         }
