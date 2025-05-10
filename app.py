@@ -6,8 +6,9 @@ import tempfile
 from io import BytesIO
 import logging
 import difflib
+import json
 
-from resume_analyzer import analyze_resume, generate_improvement_tips, rewrite_resume_sections
+from resume_analyzer import analyze_resume, generate_improvement_tips, rewrite_resume_sections, extract_resume_details
 from resume_generator import generate_optimized_resume
 from pdf_utils import extract_text_from_document, create_document
 
@@ -44,6 +45,8 @@ if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
 if 'parsing_warnings' not in st.session_state:
     st.session_state.parsing_warnings = []
+if 'extracted_details' not in st.session_state:
+    st.session_state.extracted_details = None
 
 try:
     from sample_resume import create_sample_resume
@@ -60,7 +63,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if st.session_state.processing_complete:
-    tabs = st.tabs(["Original Resume", "Analysis", "Enhanced Resume"])
+    tabs = st.tabs(["Original Resume", "Analysis", "Enhanced Resume", "Debug Info"])
     
     with tabs[0]:
         st.subheader("Your Original Resume")
@@ -140,7 +143,7 @@ if st.session_state.processing_complete:
             if diff_text:
                 st.code(diff_text, language='diff')
             else:
-                st.warning("No significant changes detected between the original and enhanced resume. Check the analysis for suggestions.")
+                st.warning("No significant changes detected between the original and enhanced resume. Check the analysis for suggestions and the Debug Info tab for more details.")
 
             # Display parsing warnings
             if st.session_state.parsing_warnings:
@@ -190,6 +193,28 @@ if st.session_state.processing_complete:
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
                 st.rerun()
+
+    with tabs[3]:
+        st.subheader("Debug Information")
+        st.markdown("### Extracted Details from Original Resume")
+        if st.session_state.extracted_details:
+            st.json(st.session_state.extracted_details)
+        else:
+            st.info("No extracted details available.")
+        
+        st.markdown("### Log Entries")
+        try:
+            with open('resume_enhancer.log', 'r') as log_file:
+                log_content = log_file.read()
+                errors = [line for line in log_content.split('\n') if 'ERROR' in line]
+                if errors:
+                    st.error("Errors found in the log:")
+                    for error in errors:
+                        st.markdown(f"- {error}")
+                else:
+                    st.info("No errors found in the log.")
+        except FileNotFoundError:
+            st.error("Log file not found.")
 
 else:
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -250,6 +275,9 @@ else:
                 st.stop()
             st.session_state.resume_text = resume_text
             st.session_state.job_role = job_role
+            
+            progress_bar.progress(20, text=progress_text + " Extracting details...")
+            st.session_state.extracted_details = extract_resume_details(resume_text)
             
             progress_bar.progress(30, text=progress_text + " Analyzing résumé content...")
             analysis_results = analyze_resume(resume_text, job_role)
