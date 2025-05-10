@@ -7,6 +7,11 @@ import textwrap
 from docx import Document
 import os
 import re
+import logging
+
+# Set up logging
+logging.basicConfig(filename='resume_enhancer.log', level=logging.DEBUG, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 def extract_text_from_document(file):
     """
@@ -27,7 +32,7 @@ def extract_text_from_document(file):
         else:
             raise ValueError(f"Unsupported file format: {file_extension}")
     except Exception as e:
-        print(f"Error extracting text from document: {e}")
+        logging.error(f"Error extracting text from document: {e}")
         return "Error extracting text from document"
 
 def extract_text_from_pdf(pdf_file):
@@ -39,7 +44,7 @@ def extract_text_from_pdf(pdf_file):
             text += page.extract_text() or ""
         return text
     except Exception as e:
-        print(f"Error extracting text from PDF: {e}")
+        logging.error(f"Error extracting text from PDF: {e}")
         return "Error extracting text from PDF"
 
 def extract_text_from_docx(docx_file):
@@ -54,7 +59,7 @@ def extract_text_from_docx(docx_file):
                     text += cell.text + "\n"
         return text
     except Exception as e:
-        print(f"Error extracting text from DOCX: {e}")
+        logging.error(f"Error extracting text from DOCX: {e}")
         return "Error extracting text from DOCX"
 
 def create_document(resume_text, output_format='pdf'):
@@ -68,6 +73,7 @@ def create_document(resume_text, output_format='pdf'):
 def create_pdf(resume_text):
     """
     Create a professionally formatted PDF document with a modern two-column layout.
+    Falls back to basic formatting if parsing fails.
     
     Args:
         resume_text (str): The optimized resume text
@@ -76,6 +82,9 @@ def create_pdf(resume_text):
         bytes: PDF file as bytes
     """
     try:
+        # Log the input resume text for debugging
+        logging.debug(f"Input resume text:\n{resume_text}")
+
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
         pdf.set_margins(15, 15, 15)
@@ -84,6 +93,13 @@ def create_pdf(resume_text):
         main_content_width = pdf.w - pdf.r_margin - main_content_x
 
         sections = parse_markdown_resume(resume_text)
+
+        # Check if parsing was successful
+        required_sections = ['name', 'contact', 'summary', 'skills', 'experience', 'education']
+        missing_sections = [s for s in required_sections if s not in sections or not sections[s].strip()]
+        if missing_sections:
+            logging.warning(f"Missing or empty sections: {missing_sections}")
+            return create_fallback_pdf(resume_text)
 
         # Sidebar: Contact and Skills
         pdf.set_xy(15, 15)
@@ -170,8 +186,8 @@ def create_pdf(resume_text):
         pdf_output = pdf.output(dest='S')
         return pdf_output if isinstance(pdf_output, bytes) else pdf_output.encode('latin-1')
     except Exception as e:
-        print(f"Error creating PDF: {e}")
-        return create_error_document('PDF')
+        logging.error(f"Error creating PDF: {e}")
+        return create_fallback_pdf(resume_text)
 
 def parse_markdown_resume(markdown_text):
     """
@@ -191,11 +207,11 @@ def parse_markdown_resume(markdown_text):
         ('contact', r'CONTACT'),
         ('summary', r'PROFESSIONAL SUMMARY|SUMMARY'),
         ('skills', r'SKILLS'),
-        ('experience', r'PROFESSIONAL EXPERIENCE|EXPERIENCE'),
+        ('experience', r'PROFESSIONAL EXPERIENCE|EXPERIENCE|WORK EXPERIENCE'),
         ('education', r'EDUCATION'),
         ('certifications', r'CERTIFICATIONS'),
         ('projects', r'PROJECTS'),
-        ('hobbies_interests', r'HOBBIES\s*&\s*INTERESTS|HOBBIES'),
+        ('hobbies_interests', r'HOBBIES\s*&\s*INTERESTS|HOBBIES|INTERESTS'),
         ('awards', r'AWARDS'),
         ('publications', r'PUBLICATIONS')
     ]
@@ -204,7 +220,8 @@ def parse_markdown_resume(markdown_text):
         line = line.strip()
         matched = False
         for section_key, pattern in section_patterns:
-            if re.match(rf'^#+.*{pattern}', line, re.IGNORECASE):
+            # Match headers with flexible markdown levels and colons
+            if re.match(rf'^(#+)?\s*{pattern}[\s:]*$', line, re.IGNORECASE):
                 if current_section:
                     sections[current_section] = '\n'.join(current_content).strip()
                 current_section = section_key
@@ -220,11 +237,39 @@ def parse_markdown_resume(markdown_text):
     # Ensure all required sections exist
     required_sections = ['name', 'contact', 'summary', 'skills', 'experience', 'education']
     for section in required_sections:
-        if section not in sections:
+        if section not in sections or not sections[section].strip():
             sections[section] = f"[Missing {section.capitalize()} Section]"
-            print(f"Warning: {section.capitalize()} section not found in parsed resume")
+            logging.warning(f"{section.capitalize()} section not found or empty in parsed resume")
 
+    logging.debug(f"Parsed sections: {sections.keys()}")
     return sections
+
+def create_fallback_pdf(resume_text):
+    """
+    Create a basic PDF with raw resume text if parsing fails.
+    
+    Args:
+        resume_text (str): The optimized resume text
+        
+    Returns:
+        bytes: PDF file as bytes
+    """
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_margins(15, 15, 15)
+        pdf.set_font("Arial", size=10)
+        pdf.multi_cell(0, 5, "Note: Structured formatting could not be applied due to parsing issues.\nBelow is the raw optimized resume text:\n")
+        pdf.ln(5)
+        lines = resume_text.split('\n')
+        for line in lines:
+            if line.strip():
+                pdf.multi_cell(0, 5, line.strip())
+        pdf_output = pdf.output(dest='S')
+        return pdf_output if isinstance(pdf_output, bytes) else pdf_output.encode('latin-1')
+    except Exception as e:
+        logging.error(f"Error creating fallback PDF: {e}")
+        return create_error_document('PDF')
 
 def create_docx(resume_text):
     try:
@@ -245,7 +290,7 @@ def create_docx(resume_text):
         docx_bytes.seek(0)
         return docx_bytes.getvalue()
     except Exception as e:
-        print(f"Error creating DOCX: {e}")
+        logging.error(f"Error creating DOCX: {e}")
         return create_error_document('DOCX')
 
 def create_error_document(format_type):
@@ -256,18 +301,18 @@ def create_error_document(format_type):
             error_pdf.set_font("Arial", size=12)
             error_pdf.cell(0, 10, "Error creating optimized resume PDF", ln=True)
             error_pdf.cell(0, 10, "Possible issues: Invalid markdown format or missing sections.", ln=True)
-            error_pdf.cell(0, 10, "Please check your resume text and try again.", ln=True)
+            error_pdf.cell(0, 10, "Please check the resume text and try again.", ln=True)
             error_output = error_pdf.output(dest='S')
             return error_output if isinstance(error_output, bytes) else error_output.encode('latin-1')
         elif format_type.upper() == 'DOCX':
             error_doc = Document()
             error_doc.add_heading("Error creating optimized resume DOCX", 0)
             error_doc.add_paragraph("Possible issues: Invalid markdown format or missing sections.")
-            error_doc.add_paragraph("Please check your resume text and try again.")
+            error_doc.add_paragraph("Please check the resume text and try again.")
             error_bytes = io.BytesIO()
             error_doc.save(error_bytes)
             error_bytes.seek(0)
             return error_bytes.getvalue()
     except Exception as e:
-        print(f"Error creating error document: {e}")
+        logging.error(f"Error creating error document: {e}")
         return b""
