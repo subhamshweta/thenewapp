@@ -12,9 +12,12 @@ from resume_analyzer import analyze_resume, generate_improvement_tips, rewrite_r
 from resume_generator import generate_optimized_resume
 from pdf_utils import extract_text_from_document, create_document
 
-# Set up logging
-logging.basicConfig(filename='resume_enhancer.log', level=logging.DEBUG, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# Set page config as the first Streamlit command
+st.set_page_config(
+    page_title="Resume Enhancer",
+    page_icon="📄",
+    layout="centered"
+)
 
 # Custom CSS for Apple-inspired design
 st.markdown("""
@@ -150,11 +153,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.set_page_config(
-    page_title="Resume Enhancer",
-    page_icon="📄",
-    layout="centered"
-)
+# Set up logging
+logging.basicConfig(filename='resume_enhancer.log', level=logging.DEBUG, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Session state initialization
 if 'resume_text' not in st.session_state:
